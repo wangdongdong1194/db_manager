@@ -1,0 +1,8 @@
+# 文件
+.env
+main
+.DS_Store
+*.exe
+*.out
+
+# 目录
