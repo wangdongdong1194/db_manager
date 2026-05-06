@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,25 +23,14 @@ func Load() (Config, error) {
 	loadDotEnv()
 
 	cfg := Config{
-		DBName:     os.Getenv("DB_NAME"),
-		DBHost:     os.Getenv("DB_HOST"),
-		DBPort:     getenvDefault("DB_PORT", "3306"),
-		DBUser:     os.Getenv("DB_USER"),
-		DBPass:     os.Getenv("DB_PASS"),
 		ServerPort: os.Getenv("SERVER_PORT"),
 		GinMode:    os.Getenv("GIN_MODE"),
 	}
 	if cfg.GinMode == "" {
 		cfg.GinMode = "release"
 	}
-
-	cfg.TrustedProxies = parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
-	if len(cfg.TrustedProxies) == 0 {
-		cfg.TrustedProxies = []string{"127.0.0.1", "::1"}
-	}
-
-	if cfg.DBHost == "" || cfg.DBUser == "" || cfg.DBPass == "" || cfg.ServerPort == "" {
-		return Config{}, errors.New("missing required env: DB_HOST, DB_USER, DB_PASS or SERVER_PORT")
+	if cfg.ServerPort == "" {
+		cfg.ServerPort = "8080"
 	}
 
 	return cfg, nil
