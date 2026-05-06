@@ -10,7 +10,11 @@ import (
 )
 
 type Config struct {
+	DBName         string
 	DBHost         string
+	DBPort         string
+	DBUser         string
+	DBPass         string
 	ServerPort     string
 	GinMode        string
 	TrustedProxies []string
@@ -20,7 +24,11 @@ func Load() (Config, error) {
 	loadDotEnv()
 
 	cfg := Config{
+		DBName:     os.Getenv("DB_NAME"),
 		DBHost:     os.Getenv("DB_HOST"),
+		DBPort:     getenvDefault("DB_PORT", "3306"),
+		DBUser:     os.Getenv("DB_USER"),
+		DBPass:     os.Getenv("DB_PASS"),
 		ServerPort: os.Getenv("SERVER_PORT"),
 		GinMode:    os.Getenv("GIN_MODE"),
 	}
@@ -33,8 +41,8 @@ func Load() (Config, error) {
 		cfg.TrustedProxies = []string{"127.0.0.1", "::1"}
 	}
 
-	if cfg.DBHost == "" || cfg.ServerPort == "" {
-		return Config{}, errors.New("missing required env: DB_HOST or SERVER_PORT")
+	if cfg.DBHost == "" || cfg.DBUser == "" || cfg.DBPass == "" || cfg.ServerPort == "" {
+		return Config{}, errors.New("missing required env: DB_HOST, DB_USER, DB_PASS or SERVER_PORT")
 	}
 
 	return cfg, nil
@@ -63,4 +71,12 @@ func parseTrustedProxies(raw string) []string {
 		}
 	}
 	return proxies
+}
+
+func getenvDefault(key string, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }

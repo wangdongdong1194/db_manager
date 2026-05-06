@@ -19,6 +19,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	// 静态目录
 	webFS, err := fs.Sub(embeddedFiles, "web")
 	if err != nil {
 		log.Fatalf("failed to sub embed fs: %v", err)
