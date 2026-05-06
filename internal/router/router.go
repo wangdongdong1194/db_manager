@@ -27,10 +27,10 @@ func Setup(cfg config.Config, staticFS http.FileSystem) (*gin.Engine, error) {
 
        // 注册静态首页
        r.GET("/", gin.WrapH(fileServer))
-       // 注册健康检查
-       r.GET("/api/health", handler.NewHealthHandler(cfg))
-       r.GET("/api/mysql/testConnect", handler.TestConnect)
-       r.GET("/api/mysql/version", handler.Version)
+       r.GET("/api/health", handler.NewHealthHandler(cfg)) // 注册健康检查
+       r.GET("/api/mysql/testConnect", handler.TestConnect) // 连接测试接口
+       r.GET("/api/mysql/version", handler.Version) // 版本查询接口
+       r.GET("/api/mysql/databases", handler.Databases) // 数据库列表查询接口
        // 注册兜底静态
        r.NoRoute(gin.WrapH(fileServer))
 

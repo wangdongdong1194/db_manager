@@ -19,13 +19,7 @@ type SConnect struct {
 }
 // TestConnect 测试 MySQL 连接
 func TestConnect(c *gin.Context){
-	db, err := connectMySQL(SConnect{
-		Host:     c.DefaultQuery("host", ""),
-		Port:     c.DefaultQuery("port", "3306"),
-		User:     c.DefaultQuery("user", ""),
-		Password: c.DefaultQuery("password", ""),
-		DBName:   c.DefaultQuery("dbname", ""),
-	})
+	db, err := connectMySQL(c)
 	log.Println(db)
 	log.Println(err)
 	if err != nil {
@@ -48,7 +42,14 @@ func TestConnect(c *gin.Context){
 	})
 }
 // 链接MySQL 数据库
-func connectMySQL(connect SConnect) (*sql.DB, error) {
+func connectMySQL(c *gin.Context) (*sql.DB, error) {
+	connect := SConnect{
+		Host:     c.DefaultQuery("host", ""),
+		Port:     c.DefaultQuery("port", "3306"),
+		User:     c.DefaultQuery("user", ""),
+		Password: c.DefaultQuery("password", ""),
+		DBName:   c.DefaultQuery("dbname", ""),
+	}
 	dnsURI := fmt.Sprintf("%s:%s@tcp(%s:%s)/?parseTime=true&charset=utf8mb4,utf8",
 		connect.User,
 		connect.Password,
@@ -71,12 +72,8 @@ func connectMySQL(connect SConnect) (*sql.DB, error) {
 }
 // Version 获取 MySQL 版本
 func Version(c *gin.Context) {
-	db, err := connectMySQL(SConnect{
-		Host:     c.DefaultQuery("host", ""),
-		Port:     c.DefaultQuery("port", "3306"),
-		User:     c.DefaultQuery("user", ""),
-		Password: c.DefaultQuery("password", ""),
-	})
+	db, err := connectMySQL(c)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "error",
@@ -99,5 +96,45 @@ func Version(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
 		"version": version,
+	})
+}
+// 全部数据库
+func Databases(c *gin.Context) {
+	db, err := connectMySQL(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "failed to open mysql connection",
+		})
+		return
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SHOW DATABASES")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "failed to query databases",
+		})
+		return
+	}
+	defer rows.Close()
+
+	var databases []string
+	for rows.Next() {
+		var dbName string
+		if err := rows.Scan(&dbName); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status":  "error",
+				"message": "failed to scan database name",
+			})
+			return
+		}
+		databases = append(databases, dbName)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "ok",
+		"databases": databases,
 	})
 }
