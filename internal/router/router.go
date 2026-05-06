@@ -32,6 +32,8 @@ func Setup(cfg config.Config, staticFS http.FileSystem) (*gin.Engine, error) {
 	r.GET("/api/mysql/version", handler.Version)         // 版本查询接口
 	r.GET("/api/mysql/databases", handler.Databases)     // 数据库列表查询接口
 	r.GET("/api/mysql/tables", handler.Tables)           // 表列表查询接口
+	r.GET("/api/mysql/columns", handler.Columns)         // 列信息查询接口
+	r.GET("/api/mysql/list", handler.List)               // 数据列表查询接口
 	// 注册兜底静态
 	r.NoRoute(gin.WrapH(fileServer))
 
