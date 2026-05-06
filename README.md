@@ -40,4 +40,46 @@ go run .
 ## 打包运行
 
 go build -o main .
+
 ./main
+
+
+## 对齐
+1. 递归格式化整个项目
+
+```bash
+go fmt ./...
+```
+
+2. 安装 goimports（Go 1.23 可用版本）
+
+```bash
+go install golang.org/x/tools/cmd/goimports@v0.30.0
+```
+
+3. 当前终端临时生效（仅当前窗口）
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
+
+4. zsh 永久生效
+
+```bash
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
+
+source ~/.zshrc
+```
+
+5. 验证与执行
+
+```bash
+which goimports
+goimports -w .
+```
+
+6. 如果仍提示 127，可用绝对路径兜底
+
+```bash
+"$(go env GOPATH)/bin/goimports" -w .
+```
