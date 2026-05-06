@@ -17,30 +17,46 @@ type SConnect struct {
 	Password string
 	DBName   string
 }
-// TestConnect 测试 MySQL 连接
-func TestConnect(c *gin.Context){
-	db, err := connectMySQL(c)
-	log.Println(db)
-	log.Println(err)
+
+var connects = make(map[string]*sql.DB)
+
+func respondDBError(c *gin.Context, message string, err error) {
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "failed to open mysql connection",
-		})
+		log.Printf("%s: %v", message, err)
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"status":  "error",
+		"message": message,
+	})
+}
+
+func getDBFromRequest(c *gin.Context) (*sql.DB, bool) {
+	db, err := connectMySQL(c)
+	if err != nil {
+		respondDBError(c, "failed to open mysql connection", err)
+		return nil, false
+	}
+	return db, true
+}
+
+// TestConnect 测试 MySQL 连接
+func TestConnect(c *gin.Context) {
+	db, ok := getDBFromRequest(c)
+	if !ok {
 		return
 	}
 	defer db.Close()
+
 	if err := db.Ping(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "failed to ping mysql",
-		})
+		respondDBError(c, "failed to ping mysql", err)
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok",
 	})
 }
+
 // 链接MySQL 数据库
 func connectMySQL(c *gin.Context) (*sql.DB, error) {
 	connect := SConnect{
@@ -50,16 +66,26 @@ func connectMySQL(c *gin.Context) (*sql.DB, error) {
 		Password: c.DefaultQuery("password", ""),
 		DBName:   c.DefaultQuery("dbname", ""),
 	}
-	dnsURI := fmt.Sprintf("%s:%s@tcp(%s:%s)/?parseTime=true&charset=utf8mb4,utf8",
+	log.Println("connect", connect)
+	dbPath := ""
+	if connect.DBName != "" {
+		dbPath = "/" + connect.DBName
+	}
+	dnsURI := fmt.Sprintf("%s:%s@tcp(%s:%s)%s?parseTime=true&charset=utf8mb4,utf8",
 		connect.User,
 		connect.Password,
 		connect.Host,
 		connect.Port,
+		dbPath,
 	)
-	if connect.DBName != "" {
-		dnsURI += connect.DBName
-	}
 	log.Println("buildDNSURI", dnsURI)
+	if db, ok := connects[dnsURI]; ok {
+		if err := db.Ping(); err == nil {
+			return db, nil
+		}
+		_ = db.Close()
+		delete(connects, dnsURI)
+	}
 	db, err := sql.Open("mysql", dnsURI)
 	if err != nil {
 		return nil, fmt.Errorf("open mysql connection: %w", err)
@@ -68,54 +94,44 @@ func connectMySQL(c *gin.Context) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping mysql: %w", err)
 	}
+	if connect.DBName != "" {
+		connects[dnsURI] = db
+	}
 	return db, nil
 }
+
 // Version 获取 MySQL 版本
 func Version(c *gin.Context) {
-	db, err := connectMySQL(c)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "failed to open mysql connection",
-		})
+	db, ok := getDBFromRequest(c)
+	if !ok {
 		return
 	}
 	defer db.Close()
 
 	var version string
-	err = db.QueryRow("SELECT VERSION()").Scan(&version)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "failed to query mysql version",
-		})
+	if err := db.QueryRow("SELECT VERSION()").Scan(&version); err != nil {
+		respondDBError(c, "failed to query mysql version", err)
 		return
 	}
+
 	log.Println("version", version)
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
 		"version": version,
 	})
 }
+
 // 全部数据库
 func Databases(c *gin.Context) {
-	db, err := connectMySQL(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "failed to open mysql connection",
-		})
+	db, ok := getDBFromRequest(c)
+	if !ok {
 		return
 	}
 	defer db.Close()
 
 	rows, err := db.Query("SHOW DATABASES")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "failed to query databases",
-		})
+		respondDBError(c, "failed to query databases", err)
 		return
 	}
 	defer rows.Close()
@@ -124,17 +140,60 @@ func Databases(c *gin.Context) {
 	for rows.Next() {
 		var dbName string
 		if err := rows.Scan(&dbName); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status":  "error",
-				"message": "failed to scan database name",
-			})
+			respondDBError(c, "failed to scan database name", err)
 			return
 		}
 		databases = append(databases, dbName)
+	}
+	if err := rows.Err(); err != nil {
+		respondDBError(c, "failed to iterate databases", err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "ok",
 		"databases": databases,
+	})
+}
+
+// 全部表
+func Tables(c *gin.Context) {
+	if c.Query("dbname") == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "missing dbname parameter",
+		})
+		return
+	}
+	db, ok := getDBFromRequest(c)
+	if !ok {
+		return
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SHOW TABLES")
+	if err != nil {
+		respondDBError(c, "failed to query tables", err)
+		return
+	}
+	defer rows.Close()
+	log.Println("rows", rows)
+	tables := make([]string, 0)
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			respondDBError(c, "failed to scan table name", err)
+			return
+		}
+		tables = append(tables, tableName)
+	}
+	if err := rows.Err(); err != nil {
+		respondDBError(c, "failed to iterate tables", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"tables": tables,
 	})
 }
